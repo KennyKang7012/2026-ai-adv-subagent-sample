@@ -5,11 +5,17 @@ import { mkdirSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// 資料庫檔案放在專案根目錄的 data/ 資料夾內
-const dataDir = join(__dirname, '..', 'data');
-mkdirSync(dataDir, { recursive: true });
+// 測試環境改用 in-memory 資料庫，避免污染真實的 data/todos.db
+const isTest = process.env.NODE_ENV === 'test';
 
-const dbPath = join(dataDir, 'todos.db');
+let dbPath = ':memory:';
+if (!isTest) {
+  // 資料庫檔案放在專案根目錄的 data/ 資料夾內
+  const dataDir = join(__dirname, '..', 'data');
+  mkdirSync(dataDir, { recursive: true });
+  dbPath = join(dataDir, 'todos.db');
+}
+
 const db = new Database(dbPath);
 
 // 開啟 WAL 模式，提升並行讀寫效能
