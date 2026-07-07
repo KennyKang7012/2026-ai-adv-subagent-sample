@@ -26,8 +26,9 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'title 為必填欄位' });
   }
 
-  const info = db.prepare('INSERT INTO todos (title) VALUES (?)').run(title);
-  const row = db.prepare('SELECT * FROM todos WHERE id = ?').get(info.lastInsertRowid);
+  // insert new todo and fetch it back
+  var new_todo_info = db.prepare('INSERT INTO todos (title) VALUES (?)').run(title);
+  var row = db.prepare('SELECT * FROM todos WHERE id = ?').get(new_todo_info.lastInsertRowid);
   res.status(201).json(serialize(row));
 });
 
