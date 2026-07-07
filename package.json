@@ -1,0 +1,24 @@
+{
+  "name": "todo-list-sample",
+  "version": "1.0.0",
+  "description": "SubAgent 課綱範例：使用 Node.js + Express + SQLite 打造的 To-Do List 小工具",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "todo",
+    "express",
+    "sqlite",
+    "subagent",
+    "sample"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "express": "^5.1.0"
+  }
+}

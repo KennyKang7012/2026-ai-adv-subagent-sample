@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>To-Do List</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>📝 To-Do List</h1>
+
+      <form id="todo-form" class="todo-form">
+        <input
+          id="todo-input"
+          type="text"
+          placeholder="今天想完成什麼？"
+          autocomplete="off"
+          required
+        />
+        <button type="submit">新增</button>
+      </form>
+
+      <ul id="todo-list" class="todo-list"></ul>
+
+      <p id="empty-state" class="empty-state" hidden>目前沒有待辦事項，來新增一筆吧！</p>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
