@@ -1,6 +1,8 @@
 ---
 name: smoke-tester
 description: 對執行中的 To-Do 伺服器做 API smoke 測試。當使用者要求「smoke test / 快速確認 API 正常 / 上線前檢查」時使用。透過 api-smoke-test Skill 執行並回報結果，不修改任何檔案。
+skills: 
+  - api-smoke-test
 tools: Read, Bash, Skill
 model: sonnet
 ---
