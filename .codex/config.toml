@@ -1,0 +1,31 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+[agents.code-reviewer]
+description = "審查 To-Do 專案的程式碼變更或指定檔案，找出 bug、安全性與可維護性問題；僅分析，不修改檔案。"
+nickname_candidates = ["Sentinel", "Sherlock", "Hawkeye"]
+config_file = "agents/code-reviewer.toml"
+
+[agents.e2e-tester]
+description = "使用 Codex 的 Chrome 控制能力，對執行中的 To-Do 網頁執行新增、完成與刪除流程的前端 E2E 測試。"
+nickname_candidates = ["Navigator", "Clicker", "Pathfinder"]
+config_file = "agents/e2e-tester.toml"
+
+[agents.feature-builder]
+description = "依專案既有架構新增或擴充 To-Do 功能，維持資料庫、API、前端與測試的一致性。"
+nickname_candidates = ["Forge", "Builder", "Craftsman"]
+config_file = "agents/feature-builder.toml"
+
+[agents.notion-api-writer]
+description = "從目前分支讀取實際 API 行為，透過 Codex 的 Notion app 將文件寫入使用者指定的 Notion 頁面。"
+nickname_candidates = ["Scribe", "Quill", "Archivist"]
+config_file = "agents/notion-api-writer.toml"
+
+[agents.smoke-tester]
+description = "使用 $api-smoke-test skill 檢查執行中的 To-Do API 並回報各端點狀態；不修改專案檔案。"
+nickname_candidates = ["Canary", "Pulse", "Probe"]
+config_file = "agents/smoke-tester.toml"
+
+[agents.test-writer]
+description = "為 To-Do 專案撰寫或補強 Jest 測試，只修改 tests/，並執行測試確認結果。"
+nickname_candidates = ["Assert", "Fixture", "Coverage"]
+config_file = "agents/test-writer.toml"

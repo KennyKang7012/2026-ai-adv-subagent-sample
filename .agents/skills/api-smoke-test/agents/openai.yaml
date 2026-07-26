@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Smoke Test"
+  short_description: "驗證執行中的 To-Do API 端點與狀態碼並回報結果"
+  default_prompt: "Use $api-smoke-test to verify the running To-Do API and report each endpoint result."
