@@ -21,6 +21,18 @@ describe('回應契約', () => {
     expect(res.body.map((todo) => todo.title)).toEqual(['C', 'B', 'A']);
   });
 
+  test('GET 以 created_at 為主排序，即使 id 較小', async () => {
+    const a = await createTodo('A');
+    await createTodo('B');
+
+    // 讓較早建立的 A 擁有較新的 created_at，證明排序不是只看 id
+    db.prepare("UPDATE todos SET created_at = datetime('now', 'localtime', '+1 hour') WHERE id = ?").run(a.id);
+
+    const res = await api('GET', '/api/todos');
+
+    expect(res.body.map((todo) => todo.title)).toEqual(['A', 'B']);
+  });
+
   test('GET 的 completed 為 boolean true', async () => {
     const todo = await createTodo();
     await api('PATCH', `/api/todos/${todo.id}`, { body: { completed: true } });

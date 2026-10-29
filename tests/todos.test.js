@@ -71,6 +71,19 @@ describe('PATCH /api/todos/:id', () => {
     expect(res.body).toMatchObject({ id: todo.id, completed: true, title: todo.title });
   });
 
+  test('可切換 completed 狀態（true -> false），且持久化', async () => {
+    const todo = await createTodo();
+    await api('PATCH', `/api/todos/${todo.id}`, { body: { completed: true } });
+
+    const res = await api('PATCH', `/api/todos/${todo.id}`, { body: { completed: false } });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: todo.id, completed: false });
+
+    const list = await api('GET', '/api/todos');
+    expect(list.body[0].completed).toBe(false);
+  });
+
   test('可更新 title 內容', async () => {
     const todo = await createTodo('舊標題');
 
@@ -80,6 +93,14 @@ describe('PATCH /api/todos/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ id: todo.id, title: '新標題', completed: false });
+  });
+
+  test('更新 title 後 GET 取得新標題', async () => {
+    const todo = await createTodo('舊標題');
+    await api('PATCH', `/api/todos/${todo.id}`, { body: { title: '新標題' } });
+
+    const list = await api('GET', '/api/todos');
+    expect(list.body[0].title).toBe('新標題');
   });
 
   test('更新不存在的 id 時回傳 404', async () => {
@@ -107,5 +128,31 @@ describe('DELETE /api/todos/:id', () => {
 
     expect(res.status).toBe(404);
     expect(res.body).toHaveProperty('error');
+  });
+
+  test('刪除其中一筆不影響其他筆', async () => {
+    const a = await api('POST', '/api/todos', { body: { title: 'A' } }).then((r) => r.body);
+    const b = await api('POST', '/api/todos', { body: { title: 'B' } }).then((r) => r.body);
+
+    const deleteRes = await api('DELETE', `/api/todos/${a.id}`);
+    expect(deleteRes.status).toBe(204);
+
+    const listRes = await api('GET', '/api/todos');
+    expect(listRes.body).toHaveLength(1);
+    expect(listRes.body[0]).toMatchObject({ id: b.id, title: 'B' });
+  });
+
+  test('重複刪除同一 id，第二次回 404 且其他資料不變', async () => {
+    const a = await api('POST', '/api/todos', { body: { title: 'A' } }).then((r) => r.body);
+    const b = await api('POST', '/api/todos', { body: { title: 'B' } }).then((r) => r.body);
+
+    expect((await api('DELETE', `/api/todos/${a.id}`)).status).toBe(204);
+
+    const second = await api('DELETE', `/api/todos/${a.id}`);
+    expect(second.status).toBe(404);
+    expect(second.body.error).toBe('找不到這筆待辦事項');
+
+    const listRes = await api('GET', '/api/todos');
+    expect(listRes.body.map((todo) => todo.id)).toEqual([b.id]);
   });
 });

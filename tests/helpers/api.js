@@ -67,7 +67,7 @@ export async function api(method, path, { body, headers = {} } = {}) {
   let payload;
 
   if (body !== undefined) {
-    if (typeof body === 'string') {
+    if (Buffer.isBuffer(body) || typeof body === 'string') {
       payload = body;
     } else {
       payload = JSON.stringify(body);

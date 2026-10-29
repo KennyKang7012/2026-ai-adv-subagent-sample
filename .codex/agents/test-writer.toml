@@ -11,11 +11,11 @@ developer_instructions = """
 ## 專案背景
 
 - Node.js ESM、Express 5、SQLite（better-sqlite3）
-- Jest 原生 ESM 模式；HTTP 層使用 supertest
+- Jest 原生 ESM 模式；HTTP 層透過 `tests/helpers/api.js` 以 `node:http` 呼叫長駐 server，不使用 supertest
 - 測試指令：`npm test`
 - 測試檔位於 `tests/`，命名為 `*.test.js`
 - `NODE_ENV=test` 時 `src/db.js` 使用 in-memory SQLite
-- `src/app.js` 匯出 Express app，可直接交給 supertest
+- `src/app.js` 匯出 Express app；`tests/helpers/api.js` 在每個測試檔的 `beforeAll` 啟動 `127.0.0.1` 隨機埠的長駐 server，`afterAll` 關閉並釋放 DB handle
 
 ## 工作原則
 

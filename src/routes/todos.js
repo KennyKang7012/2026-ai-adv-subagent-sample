@@ -6,19 +6,22 @@ const router = Router();
 // 以 Unicode code point 計數，讓 emoji 算 1 個字元
 const MAX_TITLE_LENGTH = 200;
 
-// 拒絕 C0/C1 控制字元，以及會讓標題看起來空白或偽造顯示順序的不可見字元。
-// U+200C/U+200D（ZWNJ/ZWJ）刻意保留：它們是部分文字系統與 emoji 組合的必要字元。
-// 以碼點範圍表示，避免原始碼混入不可見字元。
-const FORBIDDEN_RANGES = [
-  [0x0000, 0x001f], // C0 控制字元
-  [0x007f, 0x009f], // DEL 與 C1 控制字元
-  [0x00ad, 0x00ad], // SOFT HYPHEN
-  [0x200b, 0x200b], // ZERO WIDTH SPACE
-  [0x202a, 0x202e], // bidi 控制（含 RTL OVERRIDE）
-  [0x2060, 0x2060], // WORD JOINER
-  [0x2066, 0x2069], // bidi isolate
-  [0xfeff, 0xfeff], // BOM / ZERO WIDTH NO-BREAK SPACE
-];
+// 以 Unicode 類別拒絕 Cc（控制）、Cs（孤立代理）、Zl／Zp（行／段落分隔）
+// 與 Cf（格式字元）。Cf 涵蓋 bidi 控制、BOM、soft hyphen、word joiner 等。
+// U+200C/U+200D（ZWNJ/ZWJ）刻意例外：它們是部分文字系統與 emoji 組合的必要字元。
+const FORBIDDEN_CATEGORY = /[\p{Cc}\p{Cs}\p{Zl}\p{Zp}\p{Cf}]/u;
+const ALLOWED_FORMAT_CHARS = new Set([0x200c, 0x200d]);
+
+// 這些字元類別不是 Cf，但視覺上等於空白（Hangul filler、盲文空白、組合字元連接符）。
+const FORBIDDEN_CODEPOINTS = new Set([
+  0x034f, // COMBINING GRAPHEME JOINER
+  0x115f, // HANGUL CHOSEONG FILLER
+  0x1160, // HANGUL JUNGSEONG FILLER
+  0x2065, // 未分配，緊鄰 bidi 控制區塊
+  0x2800, // BRAILLE PATTERN BLANK
+  0x3164, // HANGUL FILLER
+  0xffa0, // HALFWIDTH HANGUL FILLER
+]);
 
 const POST_FIELDS = ['title'];
 const PATCH_FIELDS = ['title', 'completed'];
@@ -28,10 +31,13 @@ function isTitleTooLong(title) {
 }
 
 function hasForbiddenChars(title) {
-  return [...title].some((char) => {
+  for (const char of title) {
     const codePoint = char.codePointAt(0);
-    return FORBIDDEN_RANGES.some(([start, end]) => codePoint >= start && codePoint <= end);
-  });
+    if (ALLOWED_FORMAT_CHARS.has(codePoint)) continue;
+    if (FORBIDDEN_CODEPOINTS.has(codePoint)) return true;
+    if (FORBIDDEN_CATEGORY.test(char)) return true;
+  }
+  return false;
 }
 
 function isPlainObject(value) {

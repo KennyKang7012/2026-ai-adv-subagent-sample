@@ -9,11 +9,11 @@ model: sonnet
 
 ## 專案背景
 - Node.js（ESM，package.json 設定 `"type": "module"`）+ Express 5 + SQLite（better-sqlite3）
-- 測試框架：Jest（原生 ESM 模式），HTTP 層測試使用 supertest
+- 測試框架：Jest（原生 ESM 模式）；HTTP 層測試透過 `tests/helpers/api.js` 以 `node:http` 呼叫長駐 server，**不使用 supertest**
 - 執行測試：`npm test`
 - 測試檔放在 `tests/` 資料夾，命名為 `*.test.js`
 - 測試時 `NODE_ENV=test`，`src/db.js` 會自動改用 in-memory SQLite，不會污染 `data/todos.db`
-- 可測試進入點：`src/app.js` 匯出 Express `app`，可直接交給 supertest 使用
+- 可測試進入點：`src/app.js` 匯出 Express `app`；`tests/helpers/api.js` 會在每個測試檔的 `beforeAll` 啟動一個 `127.0.0.1` 隨機埠的長駐 server，`afterAll` 關閉並釋放 DB handle
 
 ## 工作原則
 1. 動手前先讀懂目標模組與現有測試慣例（參考 `tests/health.test.js`）。

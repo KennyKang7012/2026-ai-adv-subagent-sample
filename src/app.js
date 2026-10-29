@@ -5,21 +5,60 @@ import todosRouter from './routes/todos.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// 只看 Content-Type 的 media type；charset 等參數交給 body-parser 驗證。
+function isJsonContentType(header) {
+  return header.split(';')[0].trim().toLowerCase() === 'application/json';
+}
+
+// express.json() 預設用寬鬆的 UTF-8 解碼，非法位元組會變成 U+FFFD。
+// 在 verify 階段改用嚴格解碼，避免送出的內容與存進 DB 的內容不一致。
+const strictUtf8Decoder = new TextDecoder('utf-8', { fatal: true });
+
+function verifyUtf8(req, res, buf, encoding) {
+  if (String(encoding).toLowerCase() !== 'utf-8') return;
+
+  try {
+    strictUtf8Decoder.decode(buf);
+  } catch {
+    const err = new Error('請求 body 不是合法的 UTF-8');
+    err.type = 'entity.decode.failed';
+    throw err;
+  }
+}
+
+// 以傳輸標頭判斷是否帶 body。沒有 body 時（例如 Content-Length: 0）
+// 不攔成 415，讓 route 回「缺欄位」的 400。
+function hasRequestBody(req) {
+  if (req.headers['transfer-encoding'] !== undefined) return true;
+  const length = Number(req.headers['content-length']);
+  return Number.isFinite(length) && length > 0;
+}
+
 // 建立並回傳 Express app（與「啟動監聽」拆開，方便測試直接掛載）
 export function createApp() {
   const app = express();
 
-  // 解析 JSON request body
-  app.use(express.json());
+  // 解析 JSON request body；verify 會先拒絕非法的 UTF-8 位元組
+  app.use(express.json({ verify: verifyUtf8 }));
 
   // 提供前端靜態檔案（public 資料夾）
   app.use(express.static(join(__dirname, '..', 'public')));
 
-  // 寫入端點只接受 JSON。沒帶 Content-Type 時不在此攔，
-  // 交給 route 判斷（例如 PATCH 完全沒有 body → 400）。
+  // 寫入端點只要帶 Content-Type，media type 就必須是 JSON；
+  // 沒帶 header 時，只有帶 body 才攔成 415，其餘交給 route 回 400（缺欄位）。
+  // 不用 req.is()：它在沒有 body 時回 null，會把「header 正確但沒有 body」誤判成 415。
   app.use('/api/todos', (req, res, next) => {
     if (req.method !== 'POST' && req.method !== 'PATCH') return next();
-    if (req.headers['content-type'] && !req.is('application/json')) {
+
+    const contentType = req.headers['content-type'];
+    if (contentType) {
+      if (!isJsonContentType(contentType)) {
+        return res.status(415).json({ error: 'Content-Type 必須為 application/json' });
+      }
+      return next();
+    }
+
+    if (hasRequestBody(req)) {
       return res.status(415).json({ error: 'Content-Type 必須為 application/json' });
     }
     next();
@@ -46,6 +85,9 @@ export function createApp() {
     }
     if (err.type === 'entity.too.large') {
       return res.status(413).json({ error: '請求 body 過大' });
+    }
+    if (err.type === 'entity.decode.failed') {
+      return res.status(400).json({ error: '請求 body 不是合法的 UTF-8' });
     }
 
     // body-parser 其他帶 4xx 的錯誤（不支援的 charset／encoding 等）

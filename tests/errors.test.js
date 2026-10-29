@@ -66,6 +66,70 @@ describe('Content-Type／Content-Encoding 不支援', () => {
 
     expectJsonError(res, 415);
   });
+
+  test('POST 未帶 Content-Type 但有 body 回 415 JSON', async () => {
+    const res = await api('POST', '/api/todos', { body: '{"title":"x"}' });
+
+    expectJsonError(res, 415);
+    expect(res.body.error).toBe('Content-Type 必須為 application/json');
+  });
+
+  test('PATCH 未帶 Content-Type 但有 body 回 415 JSON', async () => {
+    const res = await api('PATCH', '/api/todos/1', { body: '{"completed":true}' });
+
+    expectJsonError(res, 415);
+    expect(res.body.error).toBe('Content-Type 必須為 application/json');
+  });
+});
+
+describe('沒有 body 的寫入請求', () => {
+  test('POST 帶 application/json 但沒有 body 回 400 JSON，不是 415', async () => {
+    const res = await api('POST', '/api/todos', {
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('title 為必填欄位');
+  });
+});
+
+describe('body 編碼', () => {
+  test('非法 UTF-8 body 回 400 JSON，不會靜默變成 U+FFFD', async () => {
+    const body = Buffer.concat([
+      Buffer.from('{"title":"a'),
+      Buffer.from([0xed, 0xa0, 0x80]), // 以 UTF-8 編碼的孤立代理字元，屬非法序列
+      Buffer.from('b"}'),
+    ]);
+
+    const res = await api('POST', '/api/todos', {
+      body,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('請求 body 不是合法的 UTF-8');
+  });
+});
+
+describe('錯誤優先序', () => {
+  test('PATCH 不存在的 id + malformed JSON 回 400（parse 先於存在性）', async () => {
+    const res = await api('PATCH', '/api/todos/999999', {
+      body: '{"title": ',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('請求 body 不是合法的 JSON');
+  });
+
+  test('PATCH 不存在的 id + 合法 JSON 但非法 schema 回 404（存在性先於 schema）', async () => {
+    const res = await api('PATCH', '/api/todos/999999', {
+      body: { completed: 'yes' },
+    });
+
+    expectJsonError(res, 404);
+    expect(res.body.error).toBe('找不到這筆待辦事項');
+  });
 });
 
 describe('404 處理', () => {
