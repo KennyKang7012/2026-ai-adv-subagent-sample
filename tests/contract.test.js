@@ -33,6 +33,19 @@ describe('回應契約', () => {
     expect(res.body.map((todo) => todo.title)).toEqual(['A', 'B']);
   });
 
+  test('created_at 相同時依 id 由大到小排序', async () => {
+    await createTodo('A');
+    const b = await createTodo('B');
+
+    db.prepare("UPDATE todos SET created_at = '2026-01-01 00:00:00'").run();
+
+    const res = await api('GET', '/api/todos');
+
+    expect(res.body.map((todo) => todo.title)).toEqual(['B', 'A']);
+    expect(res.body[0].id).toBe(b.id);
+    expect(res.body[0].id).toBeGreaterThan(res.body[1].id);
+  });
+
   test('GET 的 completed 為 boolean true', async () => {
     const todo = await createTodo();
     await api('PATCH', `/api/todos/${todo.id}`, { body: { completed: true } });

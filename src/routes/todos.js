@@ -10,6 +10,7 @@ const MAX_TITLE_LENGTH = 200;
 // 與 Cf（格式字元）。Cf 涵蓋 bidi 控制、BOM、soft hyphen、word joiner 等。
 // U+200C/U+200D（ZWNJ/ZWJ）刻意例外：它們是部分文字系統與 emoji 組合的必要字元。
 const FORBIDDEN_CATEGORY = /[\p{Cc}\p{Cs}\p{Zl}\p{Zp}\p{Cf}]/u;
+const MARK_CHAR = /\p{M}/u;
 const ALLOWED_FORMAT_CHARS = new Set([0x200c, 0x200d]);
 
 // 這些字元類別不是 Cf，但視覺上等於空白（Hangul filler、盲文空白、組合字元連接符）。
@@ -36,6 +37,18 @@ function hasForbiddenChars(title) {
     if (ALLOWED_FORMAT_CHARS.has(codePoint)) continue;
     if (FORBIDDEN_CODEPOINTS.has(codePoint)) return true;
     if (FORBIDDEN_CATEGORY.test(char)) return true;
+  }
+  return false;
+}
+
+// 只含組合字元、variation selector 或 ZWNJ／ZWJ 的 title 會顯示為空白，
+// 因此 trim 後至少要有一個非 Mark、非 ZWNJ／ZWJ 的基底字元。
+function hasVisibleBaseChar(title) {
+  for (const char of title) {
+    const codePoint = char.codePointAt(0);
+    if (ALLOWED_FORMAT_CHARS.has(codePoint)) continue;
+    if (MARK_CHAR.test(char)) continue;
+    return true;
   }
   return false;
 }
@@ -75,16 +88,16 @@ router.get('/', (req, res) => {
 
 // POST /api/todos - 新增一筆待辦事項
 router.post('/', (req, res) => {
-  if (!isPlainObject(req.body)) {
+  if (req.body !== undefined && !isPlainObject(req.body)) {
     return res.status(400).json({ error: '請求 body 必須為 JSON 物件' });
   }
 
-  const unknownFields = findUnknownFields(req.body, POST_FIELDS);
+  const unknownFields = findUnknownFields(req.body ?? {}, POST_FIELDS);
   if (unknownFields.length > 0) {
     return res.status(400).json({ error: `不支援的欄位：${unknownFields.join(', ')}` });
   }
 
-  const rawTitle = req.body.title;
+  const rawTitle = req.body?.title;
   if (rawTitle === undefined || rawTitle === null) {
     return res.status(400).json({ error: 'title 為必填欄位' });
   }
@@ -98,6 +111,9 @@ router.post('/', (req, res) => {
   }
   if (hasForbiddenChars(title)) {
     return res.status(400).json({ error: 'title 不可包含控制字元或不可見字元' });
+  }
+  if (!hasVisibleBaseChar(title)) {
+    return res.status(400).json({ error: 'title 必須包含至少一個可見字元' });
   }
   if (isTitleTooLong(title)) {
     return res.status(400).json({ error: `title 不可超過 ${MAX_TITLE_LENGTH} 字元` });
@@ -121,17 +137,17 @@ router.patch('/:id', (req, res) => {
     return res.status(404).json({ error: '找不到這筆待辦事項' });
   }
 
-  if (!isPlainObject(req.body)) {
+  if (req.body !== undefined && !isPlainObject(req.body)) {
     return res.status(400).json({ error: '請求 body 必須為 JSON 物件' });
   }
 
-  const unknownFields = findUnknownFields(req.body, PATCH_FIELDS);
+  const unknownFields = findUnknownFields(req.body ?? {}, PATCH_FIELDS);
   if (unknownFields.length > 0) {
     return res.status(400).json({ error: `不支援的欄位：${unknownFields.join(', ')}` });
   }
 
-  const rawTitle = req.body.title;
-  const rawCompleted = req.body.completed;
+  const rawTitle = req.body?.title;
+  const rawCompleted = req.body?.completed;
 
   if (rawTitle === undefined && rawCompleted === undefined) {
     return res.status(400).json({ error: '請至少提供 title 或 completed' });
@@ -154,6 +170,9 @@ router.patch('/:id', (req, res) => {
     }
     if (hasForbiddenChars(title)) {
       return res.status(400).json({ error: 'title 不可包含控制字元或不可見字元' });
+    }
+    if (!hasVisibleBaseChar(title)) {
+      return res.status(400).json({ error: 'title 必須包含至少一個可見字元' });
     }
     if (isTitleTooLong(title)) {
       return res.status(400).json({ error: `title 不可超過 ${MAX_TITLE_LENGTH} 字元` });
