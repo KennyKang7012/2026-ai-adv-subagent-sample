@@ -5,13 +5,30 @@ import todosRouter from './routes/todos.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// 只看 Content-Type 的 media type；charset 等參數交給 body-parser 驗證。
+// 只看 Content-Type 的 media type；charset 由 hasUnsupportedCharset 驗證。
 function isJsonContentType(header) {
   return header.split(';')[0].trim().toLowerCase() === 'application/json';
 }
 
+// RFC 8259 只允許 UTF-8。body-parser 只檢查 charset 是否以 utf- 開頭，
+// iconv 又會把 utf-8_、utf--8 等別名正規化成 UTF-8，因此這裡只接受精確的 utf-8。
+function hasUnsupportedCharset(contentType) {
+  for (const part of contentType.split(';').slice(1)) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim().toLowerCase() !== 'charset') continue;
+
+    let value = part.slice(eq + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1).trim();
+    }
+    if (value.toLowerCase() !== 'utf-8') return true;
+  }
+  return false;
+}
+
 // express.json() 預設用寬鬆的 UTF-8 解碼，非法位元組會變成 U+FFFD。
-// 在 verify 階段改用嚴格解碼，避免送出的內容與存進 DB 的內容不一致。
+// 在 verify 階段改用嚴格解碼；非 UTF-8 charset 已在 guard 回 415。
 const strictUtf8Decoder = new TextDecoder('utf-8', { fatal: true });
 
 function verifyUtf8(req, res, buf, encoding) {
@@ -38,15 +55,13 @@ function hasRequestBody(req) {
 export function createApp() {
   const app = express();
 
-  // 解析 JSON request body；verify 會先拒絕非法的 UTF-8 位元組
-  app.use(express.json({ verify: verifyUtf8 }));
+  const jsonParser = express.json({ verify: verifyUtf8 });
 
-  // 提供前端靜態檔案（public 資料夾）
-  app.use(express.static(join(__dirname, '..', 'public')));
-
-  // 寫入端點只要帶 Content-Type，media type 就必須是 JSON；
+  // 寫入端點的 Content-Type 與 charset 必須在解析前檢查，
+  // 否則 body-parser 會先用寬鬆的 iconv 解碼，讓 charset 別名繞過嚴格 UTF-8。
   // 沒帶 header 時，只有帶 body 才攔成 415，其餘交給 route 回 400（缺欄位）。
   // 不用 req.is()：它在沒有 body 時回 null，會把「header 正確但沒有 body」誤判成 415。
+  // GET／DELETE 不解析 body，避免無關內容造成 400／413。
   app.use('/api/todos', (req, res, next) => {
     if (req.method !== 'POST' && req.method !== 'PATCH') return next();
 
@@ -55,14 +70,18 @@ export function createApp() {
       if (!isJsonContentType(contentType)) {
         return res.status(415).json({ error: 'Content-Type 必須為 application/json' });
       }
-      return next();
-    }
-
-    if (hasRequestBody(req)) {
+      if (hasUnsupportedCharset(contentType)) {
+        return res.status(415).json({ error: 'charset 僅支援 utf-8' });
+      }
+    } else if (hasRequestBody(req)) {
       return res.status(415).json({ error: 'Content-Type 必須為 application/json' });
     }
-    next();
+
+    jsonParser(req, res, next);
   });
+
+  // 提供前端靜態檔案（public 資料夾）
+  app.use(express.static(join(__dirname, '..', 'public')));
 
   // 掛載 To-Do REST API
   app.use('/api/todos', todosRouter);

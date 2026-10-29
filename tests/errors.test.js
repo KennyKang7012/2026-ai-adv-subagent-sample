@@ -7,6 +7,14 @@ function expectJsonError(res, status) {
   expect(res.body.error.length).toBeGreaterThan(0);
 }
 
+function invalidUtf8Body() {
+  return Buffer.concat([
+    Buffer.from('{"title":"a'),
+    Buffer.from([0xed, 0xa0, 0x80]), // UTF-8 編碼的孤立代理字元，屬非法序列
+    Buffer.from('b"}'),
+  ]);
+}
+
 describe('全域錯誤處理', () => {
   test('malformed JSON 回 400 JSON，且不洩漏 stack 或內部路徑', async () => {
     const res = await api('POST', '/api/todos', {
@@ -80,6 +88,45 @@ describe('Content-Type／Content-Encoding 不支援', () => {
     expectJsonError(res, 415);
     expect(res.body.error).toBe('Content-Type 必須為 application/json');
   });
+
+  test.each(['utf-8_', 'utf--8', 'utf-8!', 'utf-7', 'utf-16le', 'utf-32le'])(
+    'charset=%s 回 415，不進入解析',
+    async (charset) => {
+      const res = await api('POST', '/api/todos', {
+        body: '{"title":"x"}',
+        headers: { 'Content-Type': `application/json; charset=${charset}` },
+      });
+
+      expectJsonError(res, 415);
+      expect(res.body.error).toBe('charset 僅支援 utf-8');
+    }
+  );
+
+  test.each(['application/json-patch+json', 'text/json', 'application/jsonx'])(
+    'media type %s 回 415',
+    async (contentType) => {
+      const res = await api('POST', '/api/todos', {
+        body: '{"title":"x"}',
+        headers: { 'Content-Type': contentType },
+      });
+
+      expectJsonError(res, 415);
+    }
+  );
+
+  test.each([
+    'application/json; charset=utf-8',
+    'application/json;charset=UTF-8',
+    'Application/JSON; charset="utf-8"',
+  ])('合法 Content-Type %s 可建立', async (contentType) => {
+    const res = await api('POST', '/api/todos', {
+      body: '{"title":"x"}',
+      headers: { 'Content-Type': contentType },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe('x');
+  });
 });
 
 describe('沒有 body 的寫入請求', () => {
@@ -91,23 +138,75 @@ describe('沒有 body 的寫入請求', () => {
     expectJsonError(res, 400);
     expect(res.body.error).toBe('title 為必填欄位');
   });
+
+  test('POST 沒有 body、沒有 Content-Type 時回 400 缺欄位', async () => {
+    const res = await api('POST', '/api/todos');
+
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('title 為必填欄位');
+  });
+
+  test('沒有 body 但 charset 不支援仍回 415', async () => {
+    const res = await api('POST', '/api/todos', {
+      headers: { 'Content-Type': 'application/json; charset=koi8-r' },
+    });
+
+    expectJsonError(res, 415);
+    expect(res.body.error).toBe('charset 僅支援 utf-8');
+  });
+});
+
+describe('body framing', () => {
+  test('未帶 Content-Type、以 Content-Length 帶 body 回 415', async () => {
+    const body = '{"title":"x"}';
+    const res = await api('POST', '/api/todos', {
+      body,
+      headers: { 'Content-Length': String(Buffer.byteLength(body)) },
+    });
+
+    expectJsonError(res, 415);
+    expect(res.body.error).toBe('Content-Type 必須為 application/json');
+  });
+
+  test('未帶 Content-Type、Content-Length: 0 回 400 缺欄位', async () => {
+    const res = await api('POST', '/api/todos', {
+      headers: { 'Content-Length': '0' },
+    });
+
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('title 為必填欄位');
+  });
 });
 
 describe('body 編碼', () => {
   test('非法 UTF-8 body 回 400 JSON，不會靜默變成 U+FFFD', async () => {
-    const body = Buffer.concat([
-      Buffer.from('{"title":"a'),
-      Buffer.from([0xed, 0xa0, 0x80]), // 以 UTF-8 編碼的孤立代理字元，屬非法序列
-      Buffer.from('b"}'),
-    ]);
-
     const res = await api('POST', '/api/todos', {
-      body,
+      body: invalidUtf8Body(),
       headers: { 'Content-Type': 'application/json' },
     });
 
     expectJsonError(res, 400);
     expect(res.body.error).toBe('請求 body 不是合法的 UTF-8');
+  });
+
+  test('charset=utf-8 搭配非法 UTF-8 位元組回 400', async () => {
+    const res = await api('POST', '/api/todos', {
+      body: invalidUtf8Body(),
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('請求 body 不是合法的 UTF-8');
+  });
+
+  test('charset 別名搭配非法 UTF-8 位元組回 415，不會靜默替換', async () => {
+    const res = await api('POST', '/api/todos', {
+      body: invalidUtf8Body(),
+      headers: { 'Content-Type': 'application/json; charset=utf-8_' },
+    });
+
+    expectJsonError(res, 415);
+    expect(res.body.error).toBe('charset 僅支援 utf-8');
   });
 });
 

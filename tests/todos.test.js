@@ -22,6 +22,20 @@ describe('GET /api/todos', () => {
     expect(res.body).toHaveLength(1);
     expect(res.body[0]).toMatchObject({ title: '買牛奶', completed: false });
   });
+
+  test('不解析 request body：malformed JSON 不影響查詢', async () => {
+    const body = '{"broken": ';
+    const res = await api('GET', '/api/todos', {
+      body,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': String(Buffer.byteLength(body)),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
 });
 
 describe('POST /api/todos', () => {
@@ -103,6 +117,19 @@ describe('PATCH /api/todos/:id', () => {
     expect(list.body[0].title).toBe('新標題');
   });
 
+  test('只更新 title 時保留 completed=true', async () => {
+    const todo = await createTodo('舊標題');
+    await api('PATCH', `/api/todos/${todo.id}`, { body: { completed: true } });
+
+    const res = await api('PATCH', `/api/todos/${todo.id}`, { body: { title: '新標題' } });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: todo.id, title: '新標題', completed: true });
+
+    const list = await api('GET', '/api/todos');
+    expect(list.body[0]).toMatchObject({ title: '新標題', completed: true });
+  });
+
   test('更新不存在的 id 時回傳 404', async () => {
     const res = await api('PATCH', '/api/todos/999999', { body: { completed: true } });
 
@@ -140,6 +167,25 @@ describe('DELETE /api/todos/:id', () => {
     const listRes = await api('GET', '/api/todos');
     expect(listRes.body).toHaveLength(1);
     expect(listRes.body[0]).toMatchObject({ id: b.id, title: 'B' });
+  });
+
+  test('不解析 request body：malformed JSON 仍可刪除', async () => {
+    const created = await api('POST', '/api/todos', { body: { title: '要被刪除的事' } });
+    const { id } = created.body;
+    const body = '{"broken": ';
+
+    const deleteRes = await api('DELETE', `/api/todos/${id}`, {
+      body,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': String(Buffer.byteLength(body)),
+      },
+    });
+
+    expect(deleteRes.status).toBe(204);
+
+    const listRes = await api('GET', '/api/todos');
+    expect(listRes.body.find((todo) => todo.id === id)).toBeUndefined();
   });
 
   test('重複刪除同一 id，第二次回 404 且其他資料不變', async () => {
