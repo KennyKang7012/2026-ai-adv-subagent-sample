@@ -8,6 +8,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // 測試環境改用 in-memory 資料庫，避免污染真實的 data/todos.db
 const isTest = process.env.NODE_ENV === 'test';
 
+// 保險：在 Jest 中卻沒有 NODE_ENV=test，代表 setupFiles 失效。
+// 寧可讓測試直接失敗，也不要連上 data/todos.db 被 beforeEach 清空。
+if (process.env.JEST_WORKER_ID && !isTest) {
+  throw new Error('Jest 執行中但 NODE_ENV 不是 test：拒絕連線檔案資料庫');
+}
+
 let dbPath = ':memory:';
 if (!isTest) {
   // 資料庫檔案放在專案根目錄的 data/ 資料夾內
